@@ -8,14 +8,14 @@ import (
 
 // File
 type dFile struct {
-	baseFile
+	fileInfo
 	size int64
 
 	rc io.ReadCloser
 }
 
-func (f dFile) Size() int64  { return f.size }
-func (baseFile) IsDir() bool { return false }
+func (f dFile) Size() int64 { return f.size }
+func (dFile) IsDir() bool   { return false }
 
 func (f *dFile) Read(p []byte) (n int, err error)             { return f.rc.Read(p) }
 func (f *dFile) Seek(offset int64, whence int) (int64, error) { return 0, nil }
@@ -25,11 +25,11 @@ func (f *dFile) Stat() (os.FileInfo, error) { return f, nil }
 
 // Folder
 type dFolder struct {
-	baseFile
+	fileInfo
 }
 
-func (baseFile) Size() int64 { return 0 }
-func (dFolder) IsDir() bool  { return true }
+func (dFolder) Size() int64 { return 0 }
+func (dFolder) IsDir() bool { return true }
 
 func (f dFolder) Readdir(count int) ([]os.FileInfo, error) {
 	resp, err := FilesListFolder{Path: f.PathLower}.Do(f.fs)
@@ -39,24 +39,20 @@ func (f dFolder) Readdir(count int) ([]os.FileInfo, error) {
 
 	ilist := make([]os.FileInfo, len(resp.Entries))
 	for i, v := range resp.Entries {
+		fi := fileInfo{
+			name:           v.Name,
+			ClientModified: v.ClientModified,
+			ServerModified: v.ServerModified,
+		}
+
 		switch v.Tag {
 		case "file":
 			ilist[i] = &dFile{
-				baseFile: baseFile{
-					name:           v.Name,
-					ClientModified: v.ClientModified,
-					ServerModified: v.ServerModified,
-				},
-				size: v.Size,
+				fileInfo: fi,
+				size:     v.Size,
 			}
 		case "folder":
-			ilist[i] = &dFolder{
-				baseFile: baseFile{
-					name:           v.Name,
-					ClientModified: v.ClientModified,
-					ServerModified: v.ServerModified,
-				},
-			}
+			ilist[i] = &dFolder{fileInfo: fi}
 		default:
 			panic("dropfs: unexpected tag type")
 		}
@@ -68,7 +64,7 @@ func (f dFolder) Readdir(count int) ([]os.FileInfo, error) {
 func (f *dFolder) Stat() (os.FileInfo, error) { return f, nil }
 
 // Dumby
-type baseFile struct {
+type fileInfo struct {
 	name string
 
 	PathLower   string
@@ -81,22 +77,22 @@ type baseFile struct {
 }
 
 // http.File
-func (baseFile) Close() error                                 { return nil }
-func (baseFile) Read(p []byte) (n int, err error)             { panic("OVERRIDE ME") }
-func (baseFile) Seek(offset int64, whence int) (int64, error) { panic("OVERRIDE ME") }
-func (baseFile) Readdir(count int) ([]os.FileInfo, error)     { panic("OVERRIDE ME") }
+func (fileInfo) Close() error                                 { return nil }
+func (fileInfo) Read(p []byte) (n int, err error)             { panic("OVERRIDE ME") }
+func (fileInfo) Seek(offset int64, whence int) (int64, error) { panic("OVERRIDE ME") }
+func (fileInfo) Readdir(count int) ([]os.FileInfo, error)     { panic("OVERRIDE ME") }
 
 // os.FileInfo
-func (bf baseFile) Name() string   { return bf.name }
-func (baseFile) Mode() os.FileMode { return 0777 }
+func (fi fileInfo) Name() string   { return fi.name }
+func (fileInfo) Mode() os.FileMode { return 0777 }
 
-func (bf baseFile) ModTime() time.Time {
-	t, _ := time.Parse(time.RFC3339, bf.ClientModified)
-	if sm, err := time.Parse(time.RFC3339, bf.ServerModified); err == nil && t.Before(sm) {
+func (fi fileInfo) ModTime() time.Time {
+	t, _ := time.Parse(time.RFC3339, fi.ClientModified)
+	if sm, err := time.Parse(time.RFC3339, fi.ServerModified); err == nil && t.Before(sm) {
 		t = sm
 	}
 
 	return t
 }
 
-func (bf baseFile) Sys() interface{} { return nil }
+func (fileInfo) Sys() interface{} { return nil }

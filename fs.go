@@ -27,7 +27,7 @@ func (fs *DropFS) Open(name string) (http.File, error) {
 	// special case root element
 	if name == "/" {
 		return &dFolder{
-			baseFile: baseFile{
+			fileInfo: fileInfo{
 				name:        "root",
 				PathLower:   "",
 				PathDisplay: "/",
@@ -39,6 +39,17 @@ func (fs *DropFS) Open(name string) (http.File, error) {
 
 	file, err := FileGetMetadata{Path: name}.Do(fs)
 
+	fi := fileInfo{
+		name:        file.Name,
+		PathLower:   file.PathLower,
+		PathDisplay: file.PathDisplay,
+
+		ClientModified: file.ClientModified,
+		ServerModified: file.ServerModified,
+
+		fs: fs,
+	}
+
 	var hFile http.File
 	switch file.Tag {
 	case "file":
@@ -48,32 +59,12 @@ func (fs *DropFS) Open(name string) (http.File, error) {
 		}
 
 		hFile = &dFile{
-			baseFile: baseFile{
-				name:        file.Name,
-				PathLower:   file.PathLower,
-				PathDisplay: file.PathDisplay,
-
-				ClientModified: file.ClientModified,
-				ServerModified: file.ServerModified,
-
-				fs: fs,
-			},
-			size: file.Size,
-			rc:   rc,
+			fileInfo: fi,
+			size:     file.Size,
+			rc:       rc,
 		}
 	case "folder":
-		hFile = &dFolder{
-			baseFile: baseFile{
-				name:        file.Name,
-				PathLower:   file.PathLower,
-				PathDisplay: file.PathDisplay,
-
-				ClientModified: file.ClientModified,
-				ServerModified: file.ServerModified,
-
-				fs: fs,
-			},
-		}
+		hFile = &dFolder{fileInfo: fi}
 	default:
 		return nil, os.ErrInvalid
 	}
